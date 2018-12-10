@@ -534,8 +534,8 @@ class Gedcom:
         spouse_families = self.get_families(individual,'FAMS')
         spouse_list = []
         for fam in spouse_families:
-            one_spouse = self.get_family_members(fam, spouse_type)[0]
-            spouse_list.append(one_spouse)
+            one_spouse = self.get_family_members(fam, spouse_type)
+            spouse_list.append(one_spouse[0] if one_spouse else [])
         return spouse_list
         
     def __get_one_parent(self, individual, parent_type):
@@ -545,10 +545,8 @@ class Gedcom:
         gender = 'M' if parent_type=='father' else 'F'
         parent_pair = self.get_parents(individual)
         parent = [x for x in parent_pair if x.get_gender()==gender]
-        if parent:
-            return parent[0] # only one element
-        else:
-            return parent    # empty list
+        return parent[0] if parent else []
+        
         
     def get_mother(self, individual):
         """Return the element corresponding to the mother of this individual
