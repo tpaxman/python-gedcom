@@ -524,6 +524,45 @@ class Gedcom:
                 family_members.append(element_dictionary[child_element.get_value()])
         return family_members
 
+        
+    # CUSTOM METHODS:
+    def get_spouse_list(self, individual):
+        """Return all spouses of this individual
+        :rtype: list of Elem
+        """
+        spouse_type = 'WIFE' if individual.get_gender()=='M' else 'HUSB'
+        spouse_families = self.get_families(individual,'FAMS')
+        spouse_list = []
+        for fam in spouse_families:
+            one_spouse = self.get_family_members(fam, spouse_type)[0]
+            spouse_list.append(one_spouse)
+        return spouse_list
+        
+    def __get_one_parent(self, individual, parent_type):
+        """Return the element corresponding to the mother or father of this individual
+        :rtype: Elem
+        """
+        gender = 'M' if parent_type=='father' else 'F'
+        parent_pair = self.get_parents(individual)
+        parent = [x for x in parent_pair if x.get_gender()==gender]
+        if parent:
+            return parent[0] # only one element
+        else:
+            return parent    # empty list
+        
+    def get_mother(self, individual):
+        """Return the element corresponding to the mother of this individual
+        :rtype: Elem
+        """
+        return self.__get_one_parent(individual, 'mother')
+        
+    def get_father(self, individual):
+        """Return the element corresponding to the father of this individual
+        :rtype: Elem
+        """
+        return self.__get_one_parent(individual, 'father')    
+        
+        
     # Other methods
 
     def print_gedcom(self):
