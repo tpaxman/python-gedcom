@@ -25,6 +25,7 @@
 
 import re as regex
 import pandas as pd
+import numpy as np
 from sys import version_info
 
 __all__ = ["Gedcom", "Element", "GedcomParseError"]
@@ -149,8 +150,7 @@ class Gedcom:
         self.__root_element = Element(-1, "", "ROOT", "")
         self.__parse(file_path, use_strict)
         self.__use_strict = use_strict
-        df = self.make_individuals_gedcom_df()
-        self.df = GedcomDF(df)
+        self.df_individual = self.make_individuals_gedcom_df()
 
     def invalidate_cache(self):
         """Cause get_element_list() and get_element_dictionary() to return updated data
@@ -538,7 +538,8 @@ class Gedcom:
         spouse_list = []
         for fam in spouse_families:
             one_spouse = self.get_family_members(fam, spouse_type)
-            spouse_list.append(one_spouse[0] if one_spouse else [])
+            if one_spouse:
+                spouse_list.append(one_spouse[0])
         return spouse_list
         
     def __get_one_parent(self, individual, parent_type):
@@ -622,7 +623,8 @@ class Gedcom:
         df.person = replace_pointers(df.person)
         df.spouse = [set(replace_pointers(spouse_set)) for spouse_set in df.spouse] 
         df.set_index('person', inplace=True)
-        return df
+        df_individual = GedcomDF(df)
+        return df_individual
         
     # Other methods
 
@@ -1251,6 +1253,7 @@ class Element:
         result += self.__crlf
         return result
 
+
 class GedcomDF(pd.DataFrame):
     
     def  __init__(self, df):
@@ -1260,15 +1263,16 @@ class GedcomDF(pd.DataFrame):
         super().__init__(df)
 
     def is_couple(self,person1,person2):
-        df = self
-        if df.spouse[person1] == person2:
+        spouse1 = self.spouse[person1]
+        spouse2 = self.spouse[person2]
+        if {person2}.issubset(spouse1) & {person1}.issubset(spouse2):
             return True
         else:
             return False
         
     def find_origin_couple(self):
         df = self
-        people_with_no_parents = df[np.isnan(df.mother) & np.isnan(df.father)].index
+        people_with_no_parents = df[df.mother=='' & df.father==''].index
         for person in people_with_no_parents:
             spouse = df.spouse[person]
             spousemother = df.mother[spouse]
@@ -1287,7 +1291,7 @@ class GedcomDF(pd.DataFrame):
             parent1 = parents[0]
             parent2 = parents[1]
             assert self.is_couple(parent1,parent2), 'not a couple'
-            if df.sex[parent1]=='male':
+            if df.gender[parent1]=='M':
                 father = parent1
                 mother = parent2
             else:
@@ -1295,48 +1299,51 @@ class GedcomDF(pd.DataFrame):
                 father = parent2
             father_slicer = (df.father==father)
             mother_slicer = (df.mother==mother)
-            children_row = df[father_slicer & mother_slicer].sort_values(by=['birthday'])
+            children_row = df[father_slicer & mother_slicer].sort_values(by=['birthyear'])
         elif num_parents == 1:
             parent = parents[0]
-            if df.sex[parent]=='male':
+            if df.gender[parent]=='M':
                 children_row = df[df.father==parent]
             else:
                 children_row = df[df.mother==parent]
-        children_row = children_row.sort_values(by=['birthday'])    
+        children_row = children_row.sort_values(by=['birthyear'])    
         return children_row
 
     def find_spouse(self,person):
         df = self
-        spouse = df.loc[person,'spouse']
-        spouse_row = df[df.index == spouse]
-        return spouse_row
+        spouse_set = df.loc[person,'spouse']
+        spouse_rows = df.loc[spouse_set]
+        return spouse_rows
     
-    def print_tree_order(self):
+    def print_tree_order(self,person1,person2):
         df = self
         def print_branch_name(df,parents,current_gen=0):
             gen_marker = '#' * (current_gen+1)
             if len(parents)==2:
                 person = parents[0]
                 spouse = parents[1]
-                print(gen_marker, df.firstname[person],df.surname[person],'/',
-                                  df.firstname[spouse],df.surname[spouse])
+                print(gen_marker, df.firstname[person],df.lastname[person],'/',
+                                  df.firstname[spouse],df.lastname[spouse])
                 children = df.find_children(person,spouse).index
                 if not children.empty:
                     current_gen += 1
                     gen_marker = '#' * (current_gen+1)
                     for index, person in enumerate(children):
-                        spouse_row = df.find_spouse(person)
-                        if not spouse_row.empty:
-                            spouse = spouse_row.index[0]
-                            parents = (person,spouse)
+                        spouse_rows = df.find_spouse(person)
+                        if not spouse_rows.empty:
+                            spouses = spouse_rows.index
+                            parents = [(person,s) for s in spouses]
+                            #parents = (person,spouse)
                         else:
-                            parents = (person,)
-                        print_branch_name(df,parents,current_gen) #recursive call
+                            parents = [(person,)]
+                        for p in parents:
+                            print_branch_name(df,p,current_gen) #recursive call
             else:
                 person = parents[0]
-                print(gen_marker, df.firstname[person],df.surname[person])
+                print(gen_marker, df.firstname[person],df.lastname[person])
         
-        origin_couple = df.find_origin_couple()
-        print_branch_name(df,origin_couple)
+        #origin_couple = df.find_origin_couple()
+        parents = (person1,person2)
+        print_branch_name(df,parents)
  
         
