@@ -24,6 +24,7 @@
 # Further information about the license: http://www.gnu.org/licenses/gpl-2.0.html
 
 import re as regex
+import pandas as pd
 from sys import version_info
 
 __all__ = ["Gedcom", "Element", "GedcomParseError"]
@@ -148,6 +149,7 @@ class Gedcom:
         self.__root_element = Element(-1, "", "ROOT", "")
         self.__parse(file_path, use_strict)
         self.__use_strict = use_strict
+        self.df = self.make_gedcom_dataframe()
 
     def invalidate_cache(self):
         """Cause get_element_list() and get_element_dictionary() to return updated data
@@ -559,7 +561,39 @@ class Gedcom:
         :rtype: Elem
         """
         return self.__get_one_parent(individual, 'father')    
+
+
+    # DATA FRAME
+    def make_gedcom_dataframe(self):
         
+        def make_individual_dict(self, individual):
+            assert individual.is_individual(), 'must be called an an "individual" type element'
+            indi_dict = dict(firstname  = individual.get_name()[0],
+                             lastname   = individual.get_name()[1],
+                             person     = individual.get_pointer(),
+                             gender     = individual.get_gender(),
+                             birthyear  = individual.get_birth_year(),
+                             mother     = try_get_pointer(self.get_mother(individual)) ,
+                             father     = try_get_pointer(self.get_father(individual)),
+                             spouse     = set([try_get_pointer(x) for x in self.get_spouse_list(individual)]),
+                             #famc_tag   = get_childelement_tagvalues(Elem,'FAMC'),
+                             #fams_tag   = get_childelement_tagvalues(Elem,'FAMS'),
+                             fs_tree_id = [x.get_value() for x in individual.get_child_elements() if x.get_tag()=='_FSFTID'][0]
+                            )
+            return indi_dict
+        
+        def try_get_pointer(individual):
+            try:
+                return individual.get_pointer()
+            except:
+                return ''
+        
+        individuals_list = [x for x in self.get_root_child_elements() if x.is_individual()]
+        individuals_dict_list = [make_individual_dict(self, x) for x in individuals_list]
+        df = pd.DataFrame(individuals_dict_list)
+        df = df[['firstname','lastname','gender','birthyear','person','mother','father','spouse','fs_tree_id']]
+        #self.df = df
+        return df
         
     # Other methods
 
