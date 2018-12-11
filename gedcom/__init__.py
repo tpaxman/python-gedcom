@@ -149,7 +149,7 @@ class Gedcom:
         self.__root_element = Element(-1, "", "ROOT", "")
         self.__parse(file_path, use_strict)
         self.__use_strict = use_strict
-        df = self.make_gedcom_dataframe()
+        df = self.make_individuals_gedcom_df()
         self.df = GedcomDF(df)
 
     def invalidate_cache(self):
@@ -528,7 +528,7 @@ class Gedcom:
         return family_members
 
         
-    # CUSTOM METHODS:
+    # INDIVIDUALS:
     def get_spouse_list(self, individual):
         """Return all spouses of this individual
         :rtype: list of Elem
@@ -561,11 +561,31 @@ class Gedcom:
         """Return the element corresponding to the father of this individual
         :rtype: Elem
         """
-        return self.__get_one_parent(individual, 'father')    
+        return self.__get_one_parent(individual, 'father')
 
+    # FAMILIES
+    def __get_one_family_member(self, family, family_member_type):
+        fam_member = self.get_family_members(family, family_member_type)
+        if family_member_type in {'WIFE','HUSB'}:
+            return fam_member[0] if fam_member else []  
+        elif family_member_type in {'CHIL'}:
+            return fam_member
+    
+    def get_wife(self, family):
+        return self.__get_one_family_member('WIFE')
+        
+    def get_husband(self, family):
+        return self.__get_one_family_member('HUSB')
+        
+    def get_children(self, family):
+        return self.__get_one_family_member('CHIL')
+        
 
-    # DATA FRAME
-    def make_gedcom_dataframe(self):
+     
+        
+
+    # GEDCOM DATA FRAME
+    def make_individuals_gedcom_df(self):
         
         def make_individual_dict(self, individual):
             assert individual.is_individual(), 'must be called an an "individual" type element'
@@ -593,7 +613,15 @@ class Gedcom:
         individuals_dict_list = [make_individual_dict(self, x) for x in individuals_list]
         df = pd.DataFrame(individuals_dict_list)
         df = df[['firstname','lastname','gender','birthyear','person','mother','father','spouse','fs_tree_id']]
-        #self.df = df
+        
+        # change all individual pointers to integer markers:
+        INDIVIDUALS_POINTER_REPLACEMENTS = dict(zip(df.person, range(0,len(df.person))))
+        replace_pointers = lambda pointer_list: [INDIVIDUALS_POINTER_REPLACEMENTS[x] if not x=='' else '' for x in pointer_list]
+        df.father = replace_pointers(df.father)
+        df.mother = replace_pointers(df.mother)
+        df.person = replace_pointers(df.person)
+        df.spouse = [set(replace_pointers(spouse_set)) for spouse_set in df.spouse] 
+        df.set_index('person', inplace=True)
         return df
         
     # Other methods
@@ -1228,7 +1256,7 @@ class GedcomDF(pd.DataFrame):
     def  __init__(self, df):
         
         #df = pd.DataFrame(self, df)
-        df.set_index('person',inplace=True)
+        #df.set_index('person',inplace=True)
         super().__init__(df)
 
     def is_couple(self,person1,person2):
