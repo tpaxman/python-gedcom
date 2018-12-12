@@ -150,7 +150,7 @@ class Gedcom:
         self.__root_element = Element(-1, "", "ROOT", "")
         self.__parse(file_path, use_strict)
         self.__use_strict = use_strict
-        self.df_individual = self.make_individuals_gedcom_df()
+        #self.df_individual = self.make_individuals_gedcom_df()
 
     def invalidate_cache(self):
         """Cause get_element_list() and get_element_dictionary() to return updated data
@@ -580,51 +580,6 @@ class Gedcom:
         
     def get_children(self, family):
         return self.__get_one_family_member('CHIL')
-        
-
-     
-        
-
-    # GEDCOM DATA FRAME
-    def make_individuals_gedcom_df(self):
-        
-        def make_individual_dict(self, individual):
-            assert individual.is_individual(), 'must be called an an "individual" type element'
-            indi_dict = dict(firstname  = individual.get_name()[0],
-                             lastname   = individual.get_name()[1],
-                             person     = individual.get_pointer(),
-                             gender     = individual.get_gender(),
-                             birthyear  = individual.get_birth_year(),
-                             mother     = try_get_pointer(self.get_mother(individual)) ,
-                             father     = try_get_pointer(self.get_father(individual)),
-                             spouse     = set([try_get_pointer(x) for x in self.get_spouse_list(individual)]),
-                             #famc_tag   = get_childelement_tagvalues(Elem,'FAMC'),
-                             #fams_tag   = get_childelement_tagvalues(Elem,'FAMS'),
-                             fs_tree_id = [x.get_value() for x in individual.get_child_elements() if x.get_tag()=='_FSFTID'][0]
-                            )
-            return indi_dict
-        
-        def try_get_pointer(individual):
-            try:
-                return individual.get_pointer()
-            except:
-                return ''
-        
-        individuals_list = [x for x in self.get_root_child_elements() if x.is_individual()]
-        individuals_dict_list = [make_individual_dict(self, x) for x in individuals_list]
-        df = pd.DataFrame(individuals_dict_list)
-        df = df[['firstname','lastname','gender','birthyear','person','mother','father','spouse','fs_tree_id']]
-        
-        # change all individual pointers to integer markers:
-        INDIVIDUALS_POINTER_REPLACEMENTS = dict(zip(df.person, range(0,len(df.person))))
-        replace_pointers = lambda pointer_list: [INDIVIDUALS_POINTER_REPLACEMENTS[x] if not x=='' else '' for x in pointer_list]
-        df.father = replace_pointers(df.father)
-        df.mother = replace_pointers(df.mother)
-        df.person = replace_pointers(df.person)
-        df.spouse = [set(replace_pointers(spouse_set)) for spouse_set in df.spouse] 
-        df.set_index('person', inplace=True)
-        df_individual = GedcomDF(df)
-        return df_individual
         
     # Other methods
 
@@ -1257,11 +1212,53 @@ class Element:
 
 class GedcomDF(pd.DataFrame):
     
-    def  __init__(self, df):
+    def  __init__(self, gedcom_file):
         
+        gedcom_obj = Gedcom(gedcom_file)
+        df = self.make_individuals_gedcom_df(gedcom_obj)
         #df = pd.DataFrame(self, df)
         #df.set_index('person',inplace=True)
         super().__init__(df)
+
+    # GEDCOM DATA FRAME
+    def make_individuals_gedcom_df(self, gedcom_obj):
+        
+        def make_individual_dict(gedcom_obj, individual):
+            assert individual.is_individual(), 'must be called an an "individual" type element'
+            indi_dict = dict(firstname  = individual.get_name()[0],
+                             lastname   = individual.get_name()[1],
+                             person     = individual.get_pointer(),
+                             gender     = individual.get_gender(),
+                             birthyear  = individual.get_birth_year(),
+                             mother     = try_get_pointer(gedcom_obj.get_mother(individual)) ,
+                             father     = try_get_pointer(gedcom_obj.get_father(individual)),
+                             spouse     = set([try_get_pointer(x) for x in gedcom_obj.get_spouse_list(individual)]),
+                             #famc_tag   = get_childelement_tagvalues(Elem,'FAMC'),
+                             #fams_tag   = get_childelement_tagvalues(Elem,'FAMS'),
+                             fs_tree_id = [x.get_value() for x in individual.get_child_elements() if x.get_tag()=='_FSFTID'][0]
+                            )
+            return indi_dict
+        
+        def try_get_pointer(individual):
+            try:
+                return individual.get_pointer()
+            except:
+                return ''
+        
+        individuals_list = [x for x in gedcom_obj.get_root_child_elements() if x.is_individual()]
+        individuals_dict_list = [make_individual_dict(gedcom_obj, x) for x in individuals_list]
+        df = pd.DataFrame(individuals_dict_list)
+        df = df[['firstname','lastname','gender','birthyear','person','mother','father','spouse','fs_tree_id']]
+        
+        # change all individual pointers to integer markers:
+        INDIVIDUALS_POINTER_REPLACEMENTS = dict(zip(df.person, range(0,len(df.person))))
+        replace_pointers = lambda pointer_list: [INDIVIDUALS_POINTER_REPLACEMENTS[x] if not x=='' else '' for x in pointer_list]
+        df.father = replace_pointers(df.father)
+        df.mother = replace_pointers(df.mother)
+        df.person = replace_pointers(df.person)
+        df.spouse = [set(replace_pointers(spouse_set)) for spouse_set in df.spouse] 
+        df.set_index('person', inplace=True)
+        return df        
 
     def is_couple(self,person1,person2):
         spouse1 = self.spouse[person1]
@@ -1318,17 +1315,30 @@ class GedcomDF(pd.DataFrame):
     
     def print_tree_order(self,person1,person2):
         df = self
+        fullname1 = df.firstname[person1] + ' ' + df.lastname[person1]
+        fullname2 = df.firstname[person2] + ' ' + df.lastname[person2]
+        OUTPUT_FILE = (fullname1 + '_' + fullname2 + '.md').replace(' ','').lower()   # PASS THIS IN?
+        open(OUTPUT_FILE, 'w').close() # erase file to start over
+        
         def print_branch_name(df,parents,current_gen=0):
-            gen_marker = '#' * (current_gen+1)
+            gen_marker = '#' * current_gen
             if len(parents)==2:
                 person = parents[0]
                 spouse = parents[1]
-                print(gen_marker, df.firstname[person],df.lastname[person],'/',
-                                  df.firstname[spouse],df.lastname[spouse])
+                fullname1 = df.firstname[person] + ' ' + df.lastname[person]
+                fullname2 = df.firstname[spouse] + ' ' + df.lastname[spouse]
+                if current_gen==0:
+                    print('---',
+                          '\ntitle: ' + fullname1, '/', fullname2,
+                          '\nnumbersections: True',
+                          '\n---', 
+                          '\n', file=open(OUTPUT_FILE,'a'))
+                else:
+                    print(gen_marker, fullname1 ,'/', fullname2, file=open(OUTPUT_FILE,'a'))
                 children = df.find_children(person,spouse).index
                 if not children.empty:
                     current_gen += 1
-                    gen_marker = '#' * (current_gen+1)
+                    gen_marker = '#' * current_gen
                     for index, person in enumerate(children):
                         spouse_rows = df.find_spouse(person)
                         if not spouse_rows.empty:
@@ -1341,7 +1351,8 @@ class GedcomDF(pd.DataFrame):
                             print_branch_name(df,p,current_gen) #recursive call
             else:
                 person = parents[0]
-                print(gen_marker, df.firstname[person],df.lastname[person])
+                print(gen_marker, df.firstname[person],df.lastname[person],
+                                  file=open(OUTPUT_FILE,'a'))
         
         #origin_couple = df.find_origin_couple()
         parents = (person1,person2)
