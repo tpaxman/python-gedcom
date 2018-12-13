@@ -529,42 +529,43 @@ class Gedcom:
 
         
     # INDIVIDUALS:
-    def get_spouse_list(self, individual):
+    def get_spouses(self, individual):
         """Return all spouses of this individual
+        :type individual: Element
         :rtype: list of Elem
         """
         spouse_type = 'WIFE' if individual.get_gender()=='M' else 'HUSB'
         spouse_families = self.get_families(individual,'FAMS')
-        spouse_list = []
+        spouses = []
         for fam in spouse_families:
             one_spouse = self.get_family_members(fam, spouse_type)
             if one_spouse:
-                spouse_list.append(one_spouse[0])
-        return spouse_list
+                spouses.append(one_spouse[0])
+        return spouses
         
-    def __get_one_parent(self, individual, parent_type):
-        """Return the element corresponding to the mother or father of this individual
-        :rtype: Elem
-        """
-        gender = 'M' if parent_type=='father' else 'F'
-        parent_pair = self.get_parents(individual)
-        parent = [x for x in parent_pair if x.get_gender()==gender]
-        return parent[0] if parent else []
-        
-        
+    def __get_specific_parent(self, individual, parent_gender):
+        parents = self.get_parents(individual)
+        if parents:
+            specific_parent = [p for p in parents if p.get_gender()==parent_gender]
+            return specific_parent[0] if specific_parent else []
+        else:
+            return []
+
     def get_mother(self, individual):
         """Return the element corresponding to the mother of this individual
-        :rtype: Elem
+        :type individual: Element
+        :rtype: Element or blank list
         """
-        return self.__get_one_parent(individual, 'mother')
+        return self.__get_specific_parent(individual, parent_gender='F')
         
     def get_father(self, individual):
         """Return the element corresponding to the father of this individual
-        :rtype: Elem
+        :type individual: Element
+        :rtype: Element or blank list
         """
-        return self.__get_one_parent(individual, 'father')
+        return self.__get_specific_parent(individual, parent_gender='M')
 
-    # FAMILIES
+    # FAMILIES (NOT IN USE YET)
     def __get_one_family_member(self, family, family_member_type):
         fam_member = self.get_family_members(family, family_member_type)
         if family_member_type in {'WIFE','HUSB'}:
@@ -1216,8 +1217,6 @@ class GedcomDF(pd.DataFrame):
         
         gedcom_obj = Gedcom(gedcom_file)
         df = self.make_individuals_gedcom_df(gedcom_obj)
-        #df = pd.DataFrame(self, df)
-        #df.set_index('person',inplace=True)
         super().__init__(df)
 
     # GEDCOM DATA FRAME
@@ -1225,19 +1224,18 @@ class GedcomDF(pd.DataFrame):
         
         def make_individual_dict(gedcom_obj, individual):
             assert individual.is_individual(), 'must be called an an "individual" type element'
-            indi_dict = dict(firstname  = individual.get_name()[0],
-                             lastname   = individual.get_name()[1],
-                             person     = individual.get_pointer(),
-                             gender     = individual.get_gender(),
-                             birthyear  = individual.get_birth_year(),
-                             mother     = try_get_pointer(gedcom_obj.get_mother(individual)) ,
-                             father     = try_get_pointer(gedcom_obj.get_father(individual)),
-                             spouse     = set([try_get_pointer(x) for x in gedcom_obj.get_spouse_list(individual)]),
-                             #famc_tag   = get_childelement_tagvalues(Elem,'FAMC'),
-                             #fams_tag   = get_childelement_tagvalues(Elem,'FAMS'),
-                             fs_tree_id = [x.get_value() for x in individual.get_child_elements() if x.get_tag()=='_FSFTID'][0]
-                            )
-            return indi_dict
+            return dict(firstname  = individual.get_name()[0],
+                         lastname   = individual.get_name()[1],
+                         person     = individual.get_pointer(),
+                         gender     = individual.get_gender(),
+                         birthyear  = individual.get_birth_year(),
+                         mother     = try_get_pointer(gedcom_obj.get_mother(individual)) ,
+                         father     = try_get_pointer(gedcom_obj.get_father(individual)),
+                         spouse     = set([try_get_pointer(x) for x in gedcom_obj.get_spouses(individual)]),
+                         #famc_tag   = get_childelement_tagvalues(Elem,'FAMC'),
+                         #fams_tag   = get_childelement_tagvalues(Elem,'FAMS'),
+                         fs_tree_id = [x.get_value() for x in individual.get_child_elements() if x.get_tag()=='_FSFTID'][0]
+                        )
         
         def try_get_pointer(individual):
             try:
@@ -1267,10 +1265,13 @@ class GedcomDF(pd.DataFrame):
             return True
         else:
             return False
-        
+    
+    def unique_lastnames(self):
+        return self['lastname'].sort_values().unique().tolist()
+    
     def find_origin_couple(self):
         df = self
-        people_with_no_parents = df[df.mother=='' & df.father==''].index
+        people_with_no_parents = df[(df.mother=='') & (df.father=='')].index
         for person in people_with_no_parents:
             spouse = df.spouse[person]
             spousemother = df.mother[spouse]
@@ -1307,7 +1308,7 @@ class GedcomDF(pd.DataFrame):
         children_row = children_row.sort_values(by=['birthyear'])    
         return children_row
 
-    def find_spouse(self,person):
+    def find_spouses(self,person):
         df = self
         spouse_set = df.loc[person,'spouse']
         spouse_rows = df.loc[spouse_set]
@@ -1340,7 +1341,7 @@ class GedcomDF(pd.DataFrame):
                     current_gen += 1
                     gen_marker = '#' * current_gen
                     for index, person in enumerate(children):
-                        spouse_rows = df.find_spouse(person)
+                        spouse_rows = df.find_spouses(person)
                         if not spouse_rows.empty:
                             spouses = spouse_rows.index
                             parents = [(person,s) for s in spouses]
