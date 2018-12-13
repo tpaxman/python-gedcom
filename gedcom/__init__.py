@@ -991,7 +991,6 @@ class Element:
                             first = childOfChild.get_value()
                         if childOfChild.get_tag() == GEDCOM_TAG_SURNAME:
                             last = childOfChild.get_value()
-                break
         return first, last
 
     def get_gender(self):
