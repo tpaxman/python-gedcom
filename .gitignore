@@ -1,5 +1,7 @@
+
+# ACTUALLY DON'T IGNORE THEM FOR TESTING PURPOSES
 # Ignore .ged files
-*.ged
+#*.ged
 
 # Created by .ignore support plugin (hsz.mobi)
 ### JetBrains template
