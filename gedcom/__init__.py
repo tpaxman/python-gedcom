@@ -1258,6 +1258,7 @@ class GedcomDF(pd.DataFrame):
         df.set_index('person', inplace=True)
         return df        
 
+    # OTHER FUNCTIONS
     def is_couple(self,person1,person2):
         spouse1 = self.spouse[person1]
         spouse2 = self.spouse[person2]
@@ -1269,17 +1270,19 @@ class GedcomDF(pd.DataFrame):
     def unique_lastnames(self):
         return self['lastname'].sort_values().unique().tolist()
     
-    def find_origin_couple(self):
-        df = self
-        people_with_no_parents = df[(df.mother=='') & (df.father=='')].index
-        for person in people_with_no_parents:
-            spouse = df.spouse[person]
-            spousemother = df.mother[spouse]
-            spousefather = df.father[spouse]
-            if np.isnan([spousemother,spousefather]).all():
-                origin_couple = (person,spouse)
-                break
-        return origin_couple
+    def unique_firstnames(self):
+        return self['firstname'].sort_values().unique().tolist()
+    
+    def find_by_name(self, name_str, which_name='both'):
+        assert which_name in {'firstname','lastname','both'}, 'no such name exists'
+        firstname_bool = self['firstname'].str.contains(name_str)
+        lastname_bool = self['lastname'].str.contains(name_str)
+        if which_name=='both':
+            return self[firstname_bool | lastname_bool]
+        elif which_name=='firstname':
+            return self[firstname_bool]
+        elif which_name=='lastname':
+            return self[lastname_bool]
     
     def find_children(self, *args):
         df = self
@@ -1314,7 +1317,7 @@ class GedcomDF(pd.DataFrame):
         spouse_rows = df.loc[spouse_set]
         return spouse_rows
     
-    def print_tree_order(self,person1,person2):
+    def print_descendants_hierarchy(self,person1,person2):
         df = self
         fullname1 = df.firstname[person1] + ' ' + df.lastname[person1]
         fullname2 = df.firstname[person2] + ' ' + df.lastname[person2]
