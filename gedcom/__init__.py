@@ -1340,46 +1340,45 @@ class GedcomDF(pd.DataFrame):
         spouse_rows = df.loc[spouse_set]
         return spouse_rows
  
-    def print_descendants_hierarchy(self,person1,person2):
+    def print_descendants_hierarchy(self, person1, person2):
         """Print list of descendants of parents into output_file, formatted in hierarchical headings"""
         
-        def print_children_names(df, parents, current_gen, output_file):
+        def print_children_names(self, parents, current_gen, output_file):
             """Print the names of each children of parents and their spouses (recursively)"""
             if len(parents)==2:
-                children = df.find_children(parents[0], parents[1]).index
+                children = self.find_children(parents[0], parents[1]).index
             elif len(parents)==1:
-                children = df.find_children(parents[0]).index
+                children = self.find_children(parents[0]).index
             if not children.empty:
                 current_gen += 1
                 for c in children:
-                    spouses = df.spouse[c]
+                    spouses = self.spouse[c]
                     if spouses:
                         new_parents = [(c,s) for s in spouses]
                     else:
                         new_parents = [(c,)]
                     for p in new_parents:
-                        print(create_gen_marker(current_gen), create_name_string(p), file=open(output_file,'a'))
-                        print_children_names(df, p, current_gen, output_file)
+                        print(create_gen_marker(current_gen), create_name_string(self, p), file=open(output_file,'a'))
+                        print_children_names(self, p, current_gen, output_file)
                         
-        def create_name_string(df,couple):
+        def create_name_string(self, couple):
             """Return string of a couple's names, i.e. William Paxman / Kate Love"""
             name_str = ''
             for person in couple:
                 name_str += ' / ' if name_str else ''
-                name_str += df.firstname[person] + ' ' + df.lastname[person]
+                name_str += self.firstname[person] + ' ' + self.lastname[person]
             return name_str
             
         def create_gen_marker(current_gen):
             """Return generation marker for md file (i.e. #, ##, ###, etc.)"""
             return ('#' * current_gen)
         
-        df = self
         originparents = (person1, person2)
-        output_file = (create_name_string(originparents) + '.md').replace(' ','').replace('/','_').lower()   # PASS THIS IN?
+        output_file = (create_name_string(self, originparents) + '.md').replace(' ','').replace('/','_').lower()   # PASS THIS IN?
         open(output_file, 'w').close() # erase file to start over        
         print('---',
-          '\ntitle: ' + create_name_string(originparents),
+          '\ntitle: ' + create_name_string(self, originparents),
           '\nnumbersections: True',
           '\n---', 
           '\n', file=open(output_file,'a'))
-        print_children_names(df, originparents, 0, output_file)
+        print_children_names(self, originparents, 0, output_file)
