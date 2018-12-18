@@ -1342,14 +1342,13 @@ class GedcomDF(pd.DataFrame):
  
     def print_descendants_hierarchy(self,person1,person2):
         
-        def print_children_names(df, parents, current_gen=0):
+        def print_children_names(df, parents, current_gen, output_file):
             if len(parents)==2:
                 children = df.find_children(parents[0], parents[1]).index
             elif len(parents)==1:
                 children = df.find_children(parents[0]).index
             if not children.empty:
                 current_gen += 1
-                gen_marker = '#' * current_gen
                 for c in children:
                     spouses = df.spouse[c]
                     if spouses:
@@ -1357,24 +1356,28 @@ class GedcomDF(pd.DataFrame):
                     else:
                         new_parents = [(c,)]
                     for p in new_parents:
-                        print(gen_marker, create_name_string(p), file=open(OUTPUT_FILE,'a'))
-                        print_children_names(df, p, current_gen)
+                        print(create_gen_marker(current_gen), create_name_string(p), file=open(output_file,'a'))
+                        print_children_names(df, p, current_gen, output_file)
                         
         def create_name_string(couple):
             assert isinstance(couple, tuple), 'must be a tuple input'
             if len(couple)==2:
-                name_str = df.firstname[couple[0]] + ' ' + df.lastname[couple[0]] + ' / ' + df.firstname[couple[1]] + ' ' + df.lastname[couple[1]]
+                name_str = (df.firstname[couple[0]] + ' ' + df.lastname[couple[0]] + ' / '
+                          + df.firstname[couple[1]] + ' ' + df.lastname[couple[1]])
             elif len(couple)==1:
                 name_str = df.firstname[couple[0]] + ' ' + df.lastname[couple[0]]
             return name_str
+            
+        def create_gen_marker(current_gen):
+            return ('#' * current_gen)
         
         df = self
         originparents = (person1, person2)
-        OUTPUT_FILE = (create_name_string(originparents) + '.md').replace(' ','').replace('/','').lower()   # PASS THIS IN?
-        open(OUTPUT_FILE, 'w').close() # erase file to start over        
+        output_file = (create_name_string(originparents) + '.md').replace(' ','').replace('/','_').lower()   # PASS THIS IN?
+        open(output_file, 'w').close() # erase file to start over        
         print('---',
           '\ntitle: ' + create_name_string(originparents),
           '\nnumbersections: True',
           '\n---', 
-          '\n', file=open(OUTPUT_FILE,'a'))
-        print_children_names(df, originparents, 0)
+          '\n', file=open(output_file,'a'))
+        print_children_names(df, originparents, 0, output_file)
