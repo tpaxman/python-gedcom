@@ -1359,13 +1359,11 @@ class GedcomDF(pd.DataFrame):
                         print(create_gen_marker(current_gen), create_name_string(p), file=open(output_file,'a'))
                         print_children_names(df, p, current_gen, output_file)
                         
-        def create_name_string(couple):
-            assert isinstance(couple, tuple), 'must be a tuple input'
-            if len(couple)==2:
-                name_str = (df.firstname[couple[0]] + ' ' + df.lastname[couple[0]] + ' / '
-                          + df.firstname[couple[1]] + ' ' + df.lastname[couple[1]])
-            elif len(couple)==1:
-                name_str = df.firstname[couple[0]] + ' ' + df.lastname[couple[0]]
+        def create_name_string(df,couple):
+            name_str = ''
+            for person in couple:
+                name_str += ' / ' if name_str else ''
+                name_str += df.firstname[person] + ' ' + df.lastname[person]
             return name_str
             
         def create_gen_marker(current_gen):
