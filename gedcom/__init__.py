@@ -1341,8 +1341,10 @@ class GedcomDF(pd.DataFrame):
         return spouse_rows
  
     def print_descendants_hierarchy(self,person1,person2):
+        """Print list of descendants of parents into output_file, formatted in hierarchical headings"""
         
         def print_children_names(df, parents, current_gen, output_file):
+            """Print the names of each children of parents and their spouses (recursively)"""
             if len(parents)==2:
                 children = df.find_children(parents[0], parents[1]).index
             elif len(parents)==1:
@@ -1360,6 +1362,7 @@ class GedcomDF(pd.DataFrame):
                         print_children_names(df, p, current_gen, output_file)
                         
         def create_name_string(df,couple):
+            """Return string of a couple's names, i.e. William Paxman / Kate Love"""
             name_str = ''
             for person in couple:
                 name_str += ' / ' if name_str else ''
@@ -1367,6 +1370,7 @@ class GedcomDF(pd.DataFrame):
             return name_str
             
         def create_gen_marker(current_gen):
+            """Return generation marker for md file (i.e. #, ##, ###, etc.)"""
             return ('#' * current_gen)
         
         df = self
