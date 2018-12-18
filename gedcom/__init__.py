@@ -1339,50 +1339,42 @@ class GedcomDF(pd.DataFrame):
         spouse_set = df.loc[person,'spouse']
         spouse_rows = df.loc[spouse_set]
         return spouse_rows
-    
-    def print_descendants_hierarchy(self,person1,person2):
-        df = self
-        fullname1 = df.firstname[person1] + ' ' + df.lastname[person1]
-        fullname2 = df.firstname[person2] + ' ' + df.lastname[person2]
-        OUTPUT_FILE = (fullname1 + '_' + fullname2 + '.md').replace(' ','').lower()   # PASS THIS IN?
-        open(OUTPUT_FILE, 'w').close() # erase file to start over
-        
-        def print_branch_name(df,parents,current_gen=0):
-            gen_marker = '#' * current_gen
-            if len(parents)==2:
-                person = parents[0]
-                spouse = parents[1]
-                fullname1 = df.firstname[person] + ' ' + df.lastname[person]
-                fullname2 = df.firstname[spouse] + ' ' + df.lastname[spouse]
-                if current_gen==0:
-                    print('---',
-                          '\ntitle: ' + fullname1, '/', fullname2,
-                          '\nnumbersections: True',
-                          '\n---', 
-                          '\n', file=open(OUTPUT_FILE,'a'))
-                else:
-                    print(gen_marker, fullname1 ,'/', fullname2, file=open(OUTPUT_FILE,'a'))
-                children = df.find_children(person,spouse).index
-                if not children.empty:
-                    current_gen += 1
-                    gen_marker = '#' * current_gen
-                    for index, person in enumerate(children):
-                        spouse_rows = df.find_spouses(person)
-                        if not spouse_rows.empty:
-                            spouses = spouse_rows.index
-                            parents = [(person,s) for s in spouses]
-                            #parents = (person,spouse)
-                        else:
-                            parents = [(person,)]
-                        for p in parents:
-                            print_branch_name(df,p,current_gen) #recursive call
-            else:
-                person = parents[0]
-                print(gen_marker, df.firstname[person],df.lastname[person],
-                                  file=open(OUTPUT_FILE,'a'))
-        
-        #origin_couple = df.find_origin_couple()
-        parents = (person1,person2)
-        print_branch_name(df,parents)
  
+    def print_descendants_hierarchy(self,person1,person2):
         
+        def print_children_names(df, parents, current_gen=0):
+            if len(parents)==2:
+                children = df.find_children(parents[0], parents[1]).index
+            elif len(parents)==1:
+                children = df.find_children(parents[0]).index
+            if not children.empty:
+                current_gen += 1
+                gen_marker = '#' * current_gen
+                for c in children:
+                    spouses = df.spouse[c]
+                    if spouses:
+                        new_parents = [(c,s) for s in spouses]
+                    else:
+                        new_parents = [(c,)]
+                    for p in new_parents:
+                        print(gen_marker, create_name_string(p), file=open(OUTPUT_FILE,'a'))
+                        print_children_names(df, p, current_gen)
+                        
+        def create_name_string(couple):
+            assert isinstance(couple, tuple), 'must be a tuple input'
+            if len(couple)==2:
+                name_str = df.firstname[couple[0]] + ' ' + df.lastname[couple[0]] + ' / ' + df.firstname[couple[1]] + ' ' + df.lastname[couple[1]]
+            elif len(couple)==1:
+                name_str = df.firstname[couple[0]] + ' ' + df.lastname[couple[0]]
+            return name_str
+        
+        df = self
+        originparents = (person1, person2)
+        OUTPUT_FILE = (create_name_string(originparents) + '.md').replace(' ','').replace('/','').lower()   # PASS THIS IN?
+        open(OUTPUT_FILE, 'w').close() # erase file to start over        
+        print('---',
+          '\ntitle: ' + create_name_string(originparents),
+          '\nnumbersections: True',
+          '\n---', 
+          '\n', file=open(OUTPUT_FILE,'a'))
+        print_children_names(df, originparents, 0)
