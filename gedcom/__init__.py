@@ -150,7 +150,6 @@ class Gedcom:
         self.__root_element = Element(-1, "", "ROOT", "")
         self.__parse(file_path, use_strict)
         self.__use_strict = use_strict
-        #self.df_individual = self.make_individuals_gedcom_df()
 
     def invalidate_cache(self):
         """Cause get_element_list() and get_element_dictionary() to return updated data
@@ -1241,7 +1240,7 @@ class GedcomDF(pd.DataFrame):
         gedcom_obj = Gedcom(gedcom_file)
         df = self.make_individuals_gedcom_df(gedcom_obj)
         super().__init__(df)
-
+    
     # GEDCOM DATA FRAME
     def make_individuals_gedcom_df(self, gedcom_obj):
         
@@ -1279,7 +1278,35 @@ class GedcomDF(pd.DataFrame):
         df.person = replace_pointers(df.person)
         df.spouse = [set(replace_pointers(spouse_set)) for spouse_set in df.spouse] 
         df.set_index('person', inplace=True)
-        return df        
+        
+        # Correct all birthyears to be actual year values
+        # (output from getmyancestors can be 19871122 for example; correct to 1987)
+        def clean_birthyear(yr):
+            yr_str = str(yr)
+            if len(yr_str) > 4:
+                correct_yr = int(yr_str[0:4])
+                return correct_yr
+            else:
+                return yr          
+        df['birthyear'] = df['birthyear'].map(clean_birthyear)
+        
+        # Clean names
+        def remove_allcaps(name):
+            if name==name.upper():
+                clean_name = ' '.join(s[:1].upper() + s[1:].lower() for s in name.split(' '))
+            else:
+                clean_name = name
+            return clean_name
+        df['lastname'] = df['lastname'].map(remove_allcaps)
+        df['firstname'] = df['firstname'].map(remove_allcaps)
+        
+        return df
+        
+            #remove spaces
+            #capitalize each word ONLY, if it's already all capitals.
+            #deal with Mc or Mac, etc.
+            
+            
 
     # OTHER FUNCTIONS
     def is_couple(self,person1,person2):
@@ -1290,11 +1317,15 @@ class GedcomDF(pd.DataFrame):
         else:
             return False
     
-    def unique_lastnames(self):
-        return self['lastname'].sort_values().unique().tolist()
-    
-    def unique_firstnames(self):
-        return self['firstname'].sort_values().unique().tolist()
+    def unique_names(self, name_type='lastname', gender=None):
+        if gender:
+            names_series = self.loc[self.gender==gender,name_type]
+        else:
+            names_series = self.loc[:,name_type]
+        unique_names_list = names_series.unique().tolist()
+        unique_names_list.sort(key = lambda x: x.lower())
+        clean_names_list = [n for n in unique_names_list if n not in ('','?','unknown')]
+        return clean_names_list
     
     def find_by_name(self, name_str, which_name='both'):
         assert which_name in {'firstname','lastname','both'}, 'no such name exists'
@@ -1339,17 +1370,23 @@ class GedcomDF(pd.DataFrame):
         spouse_set = df.loc[person,'spouse']
         spouse_rows = df.loc[spouse_set]
         return spouse_rows
+     
+    def get_full_name(self, person):
+        """Get full name (first and last) of a person"""
+        return self.firstname[person] + ' ' + self.lastname[person]
  
     def print_descendants_hierarchy(self, person1, person2):
         """Print list of descendants of parents into output_file, formatted in hierarchical headings"""
         
-        def print_children_names(self, parents, current_gen, output_file):
+        def print_children_names(parents, current_gen, output_file):
             """Print the names of each children of parents and their spouses (recursively)"""
             if len(parents)==2:
                 children = self.find_children(parents[0], parents[1]).index
             elif len(parents)==1:
                 children = self.find_children(parents[0]).index
-            if not children.empty:
+            if children.empty:
+                return
+            else:
                 current_gen += 1
                 for c in children:
                     spouses = self.spouse[c]
@@ -1358,27 +1395,25 @@ class GedcomDF(pd.DataFrame):
                     else:
                         new_parents = [(c,)]
                     for p in new_parents:
-                        print(create_gen_marker(current_gen), create_name_string(self, p), file=open(output_file,'a'))
-                        print_children_names(self, p, current_gen, output_file)
-                        
-        def create_name_string(self, couple):
+                        print(create_gen_marker(current_gen), create_name_string(p), file=open(output_file,'a'))
+                        print_children_names(p, current_gen, output_file)
+
+        def create_name_string(couple, join_char=' / '):
             """Return string of a couple's names, i.e. William Paxman / Kate Love"""
-            name_str = ''
-            for person in couple:
-                name_str += ' / ' if name_str else ''
-                name_str += self.firstname[person] + ' ' + self.lastname[person]
-            return name_str
+            full_names = [self.get_full_name(p) for p in couple]
+            return join_char.join(full_names)
             
         def create_gen_marker(current_gen):
             """Return generation marker for md file (i.e. #, ##, ###, etc.)"""
             return ('#' * current_gen)
         
+        # Execute functions:
         originparents = (person1, person2)
-        output_file = (create_name_string(self, originparents) + '.md').replace(' ','').replace('/','_').lower()   # PASS THIS IN?
-        open(output_file, 'w').close() # erase file to start over        
+        output_file = (create_name_string(originparents, '_') + '.md').replace(' ','').lower()
+        open(output_file, 'w').close()                                                                    # erase file to start over        
         print('---',
-          '\ntitle: ' + create_name_string(self, originparents),
+          '\ntitle: ' + create_name_string(originparents),
           '\nnumbersections: True',
           '\n---', 
           '\n', file=open(output_file,'a'))
-        print_children_names(self, originparents, 0, output_file)
+        print_children_names(originparents, 0, output_file)
